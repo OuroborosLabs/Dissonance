@@ -1,20 +1,14 @@
 use std::error::Error;
 use futures::stream::StreamExt;
 use libp2p::{
-    noise,
-    swarm::{NetworkBehaviour, SwarmEvent, dummy},
-    tcp, yamux,
+    swarm::SwarmEvent,
 };
 use tracing_subscriber::EnvFilter;
 
-use dissonance::network;
+use dissonance::network::builder::build_swarm;
 use dissonance::NodeIdentity;
 
 // Dummy behaviour
-#[derive(NetworkBehaviour)]
-struct DummyBehaviour {
-    dummy: dummy::Behaviour,
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -25,18 +19,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Initialising node identity");
     let node_identity = NodeIdentity::get_identity()?;
 
-    let lp2p_keypair = node_identity.to_lp2p_keypair()?;
-
-    let mut swarm = libp2p::SwarmBuilder::with_existing_identity(lp2p_keypair)
-        .with_tokio()
-        .with_tcp(network::transport::tcp::build_tcp_transport(), noise::Config::new, yamux::Config::default,)?
-        .with_behaviour(|_key| {
-            Ok(DummyBehaviour {
-            dummy: dummy::Behaviour,
-             })
-             })?
-            .build();
-
+    let mut swarm = build_swarm(&node_identity)?;
     println!("Local peer ID: {}", swarm.local_peer_id());
 
     assert_eq!(swarm.local_peer_id(), &node_identity.peer_id());
