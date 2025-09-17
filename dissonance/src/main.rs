@@ -7,6 +7,7 @@ use libp2p::{
 };
 use tracing_subscriber::EnvFilter;
 
+use dissonance::network;
 use dissonance::NodeIdentity;
 
 // Dummy behaviour
@@ -22,13 +23,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .try_init();
 
     println!("Initialising node identity");
-    let node_indentity = NodeIdentity::get_identity()?;
+    let node_identity = NodeIdentity::get_identity()?;
 
-    let lp2p_keypair = node_indentity.to_lp2p_keypair()?;
+    let lp2p_keypair = node_identity.to_lp2p_keypair()?;
 
     let mut swarm = libp2p::SwarmBuilder::with_existing_identity(lp2p_keypair)
         .with_tokio()
-        .with_tcp(tcp::Config::default(), noise::Config::new, yamux::Config::default,)?
+        .with_tcp(network::transport::tcp::build_tcp_transport(), noise::Config::new, yamux::Config::default,)?
         .with_behaviour(|_key| {
             Ok(DummyBehaviour {
             dummy: dummy::Behaviour,
@@ -38,7 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     println!("Local peer ID: {}", swarm.local_peer_id());
 
-    assert_eq!(swarm.local_peer_id(), &node_indentity.peer_id());
+    assert_eq!(swarm.local_peer_id(), &node_identity.peer_id());
 
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
