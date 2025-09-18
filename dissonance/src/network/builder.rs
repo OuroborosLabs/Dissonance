@@ -1,26 +1,33 @@
-use libp2p::swarm::{dummy, NetworkBehaviour, Swarm};
-
+use libp2p::kad::store::MemoryStore;
+use libp2p::swarm::{NetworkBehaviour, Swarm};
+use libp2p::kad::Behaviour as KademliaBehaviour;
+use libp2p::identify::Behaviour as IdentifyBehaviour;
 use crate::network::transport::{
     noise::build_noise_config,
     tcp::build_tcp_config,
     yamux::build_yamux_config
 };
 
+use crate::network::behaviours::kademlia::get_kademlia;
+use crate::network::behaviours::identify::create_identify;
 use super::NodeIdentity;
 #[derive(NetworkBehaviour)]
-pub struct DummyBehaviour {
-    dummy: dummy::Behaviour,
+pub struct DissonanceBehaviour {
+    kademlia: KademliaBehaviour<MemoryStore>,
+    identify: IdentifyBehaviour
+    // dummy: dummy::Behaviour,
 }
 
-pub fn build_swarm(identity: &NodeIdentity) -> anyhow::Result<Swarm<DummyBehaviour>>{
+pub fn build_swarm(identity: &NodeIdentity) -> anyhow::Result<Swarm<DissonanceBehaviour>>{
 
     let lp2p_keypair = identity.to_lp2p_keypair()?;
     let swarm = libp2p::SwarmBuilder::with_existing_identity(lp2p_keypair)
     .with_tokio()
     .with_tcp(build_tcp_config(), build_noise_config, build_yamux_config,)?
     .with_behaviour(|_key| {
-        Ok(DummyBehaviour {
-        dummy: dummy::Behaviour,
+        Ok(DissonanceBehaviour {
+        kademlia: get_kademlia(&identity),
+        identify: create_identify(identity)
          })
          })?
         .build();
@@ -36,7 +43,7 @@ mod tests {
     #[test]
     fn test_dummy_behaviour_implements_network_behaviour() {
         fn is_network_behaviour<T: libp2p::swarm::NetworkBehaviour>() {}
-        is_network_behaviour::<DummyBehaviour>();
+        is_network_behaviour::<DissonanceBehaviour>();
     }
 
     #[test]
@@ -56,7 +63,7 @@ mod tests {
         let swarm = build_swarm(&identity).unwrap();
 
         let behaviour_any = swarm.behaviour();
-        let behaviour: &DummyBehaviour = behaviour_any;
-        let _ = &behaviour.dummy;
+        let behaviour: &DissonanceBehaviour = behaviour_any;
+        let _ = &behaviour.kademlia;
     }
 }
