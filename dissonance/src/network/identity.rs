@@ -99,3 +99,56 @@ impl NodeIdentity{
     }
 
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    fn test_identity_path(temp: &tempfile::TempDir) -> PathBuf {
+        temp.path().join("node-identity.json")
+    }
+
+    #[test]
+    fn test_generate_and_serialize_identity() {
+        let identity = NodeIdentity::load_or_generate().expect("Failed to create identity");
+        let stored = StoredNodeIdentity {
+            private_key_bytes: identity.signing_key.to_bytes(),
+        };
+        let json = serde_json::to_string_pretty(&stored).expect("Failed to serialize identity");
+        assert!(json.contains("private_key_bytes"));
+        assert_eq!(stored.private_key_bytes.len(), SECRET_KEY_LENGTH);
+    }
+
+    #[test]
+    fn test_save_and_load_identity_file() {
+        let temp = tempdir().unwrap();
+        let path = test_identity_path(&temp);
+
+        let identity = NodeIdentity::load_or_generate().expect("Failed to generate identity");
+        identity.save_to_file(&path).expect("Failed to save identity");
+
+        assert!(path.exists());
+
+        let loaded = NodeIdentity::load_from_file(&path).expect("Failed to load identity");
+        assert_eq!(identity.peer_id, loaded.peer_id);
+        assert_eq!(identity.signing_key.to_bytes(), loaded.signing_key.to_bytes());
+        assert_eq!(identity.verifying_key.to_bytes(), loaded.verifying_key.to_bytes());
+    }
+
+    #[test]
+    fn test_pub_key_bytes() {
+        let identity = NodeIdentity::load_or_generate().unwrap();
+        let pub_bytes = identity.pub_key_bytes();
+        assert_eq!(pub_bytes.len(), PUBLIC_KEY_LENGTH);
+        assert_eq!(pub_bytes, identity.verifying_key.to_bytes());
+    }
+
+    #[test]
+    fn test_to_lp2p_keypair() {
+        let identity = NodeIdentity::load_or_generate().unwrap();
+        let keypair = identity.to_lp2p_keypair().expect("Failed to convert to libp2p keypair");
+        let peer_id = PeerId::from_public_key(&keypair.public());
+        assert_eq!(peer_id, identity.peer_id);
+    }
+}
