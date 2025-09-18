@@ -58,7 +58,7 @@ mod tests {
     }
 
     #[test]
-    fn test_swarm_has_dummy_behaviour() {
+    fn test_swarm_has_dissonance_behaviour() {
         let identity = NodeIdentity::get_identity().unwrap();
         let swarm = build_swarm(&identity).unwrap();
 
