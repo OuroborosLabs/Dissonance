@@ -1,7 +1,7 @@
 use libp2p::kad::store::MemoryStore;
 use libp2p::swarm::{NetworkBehaviour, Swarm};
-use libp2p::kad::Behaviour as KademliaBehaviour;
-use libp2p::identify::Behaviour as IdentifyBehaviour;
+use libp2p::kad::{Behaviour as KademliaBehaviour, Event as KademliaEvent};
+use libp2p::identify::{Behaviour as IdentifyBehaviour, Event as IdentifyEvent};
 use crate::network::transport::{
     noise::build_noise_config,
     tcp::build_tcp_config,
@@ -11,11 +11,29 @@ use crate::network::transport::{
 use crate::network::behaviours::kademlia::get_kademlia;
 use crate::network::behaviours::identify::create_identify;
 use super::NodeIdentity;
+
 #[derive(NetworkBehaviour)]
+#[behaviour(to_swarm = "DissonanceEvent")]
 pub struct DissonanceBehaviour {
     kademlia: KademliaBehaviour<MemoryStore>,
     identify: IdentifyBehaviour
-    // dummy: dummy::Behaviour,
+}
+
+pub enum DissonanceEvent {
+    Kademlia(KademliaEvent),
+    Identify(IdentifyEvent)
+}
+
+impl From<KademliaEvent> for DissonanceEvent {
+    fn from(value: KademliaEvent) -> Self {
+        DissonanceEvent::Kademlia(value)
+    }    
+}
+
+impl From<IdentifyEvent> for DissonanceEvent {
+    fn from(value: IdentifyEvent) -> Self {
+        DissonanceEvent::Identify(value)
+    }
 }
 
 pub fn build_swarm(identity: &NodeIdentity) -> anyhow::Result<Swarm<DissonanceBehaviour>>{
