@@ -1,15 +1,19 @@
-use std::error::Error;
+use std::{error::Error, time::SystemTime};
 use futures::stream::StreamExt;
+use libp2p::identify::Info;
 use libp2p::{
     swarm::SwarmEvent,
 };
 use tracing_subscriber::EnvFilter;
 
-use dissonance::network::behaviour::{DissonanceBehaviour, DissonanceEvent};
+use dissonance::network::behaviour::{DissonanceEvent};
 use dissonance::network::builder::{build_swarm};
 use dissonance::NodeIdentity;
+use dissonance::store::{PeerStore, PeerInfo};
 
 use libp2p::kad::Event as KademliaEvent;
+
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -25,6 +29,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         NodeIdentity::get_identity()?
     };
 
+    let mut peer_store = PeerStore::new();
     let mut swarm = build_swarm(&node_identity)?;
     println!("Local peer ID: {}", swarm.local_peer_id());
 
@@ -37,13 +42,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             SwarmEvent::Behaviour(DissonanceEvent::Kademlia(event)) => match event {
                 KademliaEvent::RoutingUpdated{peer,is_new_peer,addresses,bucket_range,old_peer}=>{
-                    println!("[KAD] Routing table updated with the following peer details: {}",peer);
                     // FUTURE: 
-                    // - If `is_new_peer`, persist this peer in your local disk-backed store 
-                    //   so the node remembers it after restart (important for bootstrap performance).
-                    // - Use `addresses` to update your local peer-address book (with timestamp).
-                    // - Could check peer reputation/behavior and decide whether to keep it in the routing table.
-                    // - If `old_peer` is Some, remove/replace its state in the peer store.
+                    // - If `is_new_peer`, persist this peer in your local disk-backed store DONE
+                    //   so the node remembers it after restart (important for bootstrap performance). TODO
+                    // - Use `addresses` to update your local peer-address book (with timestamp). DONE
+                    // - Could check peer reputation/behavior and decide whether to keep it in the routing table. TODOMAYBE
+                    // - If this peer is a new one, trigger Identify protocol to fetch full info. TODO
+                    // - Use peer reputation score to decide whether to keep them. MAYBE
+                    let mut peer_info = peer_store.get_or_create(&peer);
+                    peer_info.addresses = addresses.into_vec();
+                    peer_info.last_seen = SystemTime::now();
+                    println!("[KAD] Routing table updated with the following peer details: {}",peer);
                 },
                 KademliaEvent::InboundRequest{request}=>{
                     println!("[KAD] Inbound request on DHT");
@@ -68,13 +77,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 },
                 KademliaEvent::RoutablePeer { peer, address } => {
                     println!("[KAD] Routable peer {} detected with address {:?}", peer, address);
-                    // FUTURE: This is a good place to store peer information in a local peer store.
+                    // FUTURE: This is a good place to store peer information in a local peer store.DONE
                     // Can also trigger any queued messages for this peer since it's reachable now.
+                    let peer_info = peer_store.get_or_create(&peer);
+                    peer_info.add_address(address);
+                    println!("[KAD] Routable peer {} added", peer);
                 },
                 KademliaEvent::PendingRoutablePeer { peer, address } => {
                     println!("[KAD] Pending routable peer {} with address {:?}", peer, address);
                     // FUTURE: This is when the peer is found but not yet fully confirmed.
                     // You could attempt a direct connection here, or verify Noise handshake before trusting it.
+                    let peer_info = peer_store.get_or_create(&peer);
+                    peer_info.add_address(address);
+                    println!("[KAD] Routable peer {} added", peer);
                 },
                 KademliaEvent::ModeChanged { new_mode } => {
                     println!("[KAD] mode changed to {:?}", new_mode);
@@ -86,13 +101,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
             
             SwarmEvent::Behaviour(DissonanceEvent::Identify(event)) => match event{
                 libp2p::identify::Event::Received { connection_id, peer_id, info } => {
-                    println!("[IDENTIFY] Received identity info from peer: {} on connection {:?}", peer_id, connection_id);
                     // FUTURE:
-                    // - Store peer's `info` (agent version, supported protocols, listen addresses)
-                    //   in your local peer database to help future connections.
-                    // - Verify the info (e.g., supported protocols match what you expect).
-                    // - Could enforce minimum supported protocol versions here (disconnect otherwise).
-                    // - Might use peer's public key for TOFU (Trust On First Use) logic.
+                    // - Store peer's `info` (agent version, supported protocols, listen addresses) DONE
+                    //   in your local peer database to help future connections. DONE
+                    // - Verify the info (e.g., supported protocols match what you expect). TODO
+                    // - Could enforce minimum supported protocol versions here (disconnect otherwise). TODO
+                    // - Might use peer's public key for TOFU (Trust On First Use) logic. TODO
+                    let my_agent = "basic-p2p-node/1.0.0";
+                    let supports_agent = info.agent_version == my_agent;
+                    if supports_agent{
+                    let mut peer_info = PeerInfo::new();
+                    peer_info.last_seen = SystemTime::now();
+                    peer_info.addresses = info.listen_addrs;
+                    peer_info.agent_version = Some(info.agent_version);
+                    peer_info.protocols = info.protocols;
+
+                    peer_store.insert_peer_info(peer_id, peer_info);
+                    println!("[IDENTIFY] Received identity info from peer: {} on connection {:?}", peer_id, connection_id);
+                    }
                 },
                 libp2p::identify::Event::Sent { connection_id, peer_id } => {
                     println!("[IDENTIFY] Sent our identity info to peer: {} on connection {:?}", peer_id, connection_id);
@@ -101,11 +127,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     // - This is useful to know when you can safely send encrypted messages to this peer.
                 },
                 libp2p::identify::Event::Pushed { connection_id, peer_id, info } => {
-                    println!("[IDENTIFY] Received unsolicited identity push from peer: {} on connection {:?}", peer_id, connection_id);
                     // FUTURE:
                     // - Treat this as an update: refresh your stored info about this peer.
                     // - Use this to detect network changes (peer changed IP, protocol version, etc.).
                     // - If `info` looks suspicious (e.g., protocol downgrade attack), trigger security alert.
+                    // let mut peer_info = peer_store.get_or_create(&peer_id);
+                    println!("[IDENTIFY] Received unsolicited identity push from peer: {} on connection {:?}", peer_id, connection_id);                    
                 },
                 libp2p::identify::Event::Error { connection_id, peer_id, error } => {
                     println!("[IDENTIFY] Error with peer {} on connection {:?}: {:?}", peer_id, connection_id, error);
