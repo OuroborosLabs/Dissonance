@@ -34,8 +34,8 @@ mod tests {
         is_network_behaviour::<DissonanceBehaviour>();
     }
 
-    #[test]
-    fn test_build_swarm_success() {
+    #[tokio::test]
+    async fn test_build_swarm_success() {
         let identity = NodeIdentity::get_identity().expect("Could not generate identity");
         let swarm_result = build_swarm(&identity);
         assert!(swarm_result.is_ok(), "Failed to build swarm");
@@ -45,8 +45,8 @@ mod tests {
         assert_eq!(local_peer_id, identity.peer_id(), "Mismatch in peer id");
     }
 
-    #[test]
-    fn test_swarm_has_dissonance_behaviour() {
+    #[tokio::test]
+    async fn test_swarm_has_dissonance_behaviour() {
         let identity = NodeIdentity::get_identity().unwrap();
         let swarm = build_swarm(&identity).unwrap();
 
