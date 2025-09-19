@@ -1,14 +1,18 @@
+use std::task::ready;
+
 use libp2p::kad::store::MemoryStore;
 use libp2p::swarm::{NetworkBehaviour, Swarm};
-use libp2p::kad::{Behaviour as KademliaBehaviour, Event as KademliaEvent};
+use libp2p::mdns::{Config as MdnsConfig, tokio::Behaviour as MdnsBehaviour, Event as MdnsEvent};
+use libp2p::kad::{Behaviour as KademliaBehaviour, Event as KademliaEvent, QueryId};
 use libp2p::identify::{Behaviour as IdentifyBehaviour, Event as IdentifyEvent};
+use libp2p::{Multiaddr, PeerId};
 use crate::network::transport::{
     noise::build_noise_config,
     tcp::build_tcp_config,
     yamux::build_yamux_config
 };
 
-use crate::network::behaviours::kademlia::get_kademlia;
+use crate::network::behaviours::kademlia::{self, get_kademlia};
 use crate::network::behaviours::identify::create_identify;
 use super::NodeIdentity;
 
@@ -16,12 +20,25 @@ use super::NodeIdentity;
 #[behaviour(to_swarm = "DissonanceEvent")]
 pub struct DissonanceBehaviour {
     kademlia: KademliaBehaviour<MemoryStore>,
-    identify: IdentifyBehaviour
+    identify: IdentifyBehaviour,
+    mdns: MdnsBehaviour
+}
+
+impl  DissonanceBehaviour {
+    pub fn add_kademlia_address(&mut self, peer:&PeerId, addr: Multiaddr){
+        self.kademlia.add_address(peer, addr);
+    }
+
+    pub fn bootstrap_kad(&mut self) -> Result<QueryId, libp2p::kad::store::Error>{
+        // self.kademlia.bootstrap()
+        todo!()
+    }
 }
 
 pub enum DissonanceEvent {
     Kademlia(KademliaEvent),
-    Identify(IdentifyEvent)
+    Identify(IdentifyEvent),
+    Mdns(MdnsEvent)
 }
 
 impl From<KademliaEvent> for DissonanceEvent {
@@ -36,16 +53,24 @@ impl From<IdentifyEvent> for DissonanceEvent {
     }
 }
 
+impl From<MdnsEvent> for DissonanceEvent {    
+    fn from(value: MdnsEvent) -> Self {
+        DissonanceEvent::Mdns(value)
+    }
+}
 pub fn build_swarm(identity: &NodeIdentity) -> anyhow::Result<Swarm<DissonanceBehaviour>>{
 
     let lp2p_keypair = identity.to_lp2p_keypair()?;
+    let mdns_config = MdnsConfig::default();
+    let mdns_behaviour = MdnsBehaviour::new(mdns_config, identity.peer_id)?;
     let swarm = libp2p::SwarmBuilder::with_existing_identity(lp2p_keypair)
     .with_tokio()
     .with_tcp(build_tcp_config(), build_noise_config, build_yamux_config,)?
     .with_behaviour(|_key| {
         Ok(DissonanceBehaviour {
         kademlia: get_kademlia(&identity),
-        identify: create_identify(identity)
+        identify: create_identify(identity),
+        mdns: mdns_behaviour
          })
          })?
         .build();

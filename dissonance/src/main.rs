@@ -16,9 +16,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .try_init();
+    let args: Vec<String> = std::env::args().collect();
 
     println!("Initialising node identity");
-    let node_identity = NodeIdentity::get_identity()?;
+    let node_identity = if args.contains(&"--ephemeral".to_string()) {
+        NodeIdentity::generate_ephemeral()?
+    } else {
+        NodeIdentity::get_identity()?
+    };
 
     let mut swarm = build_swarm(&node_identity)?;
     println!("Local peer ID: {}", swarm.local_peer_id());
@@ -124,6 +129,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
             SwarmEvent::ConnectionClosed { peer_id, cause, .. } => {
                 println!("Connection to {peer_id} closed: {cause:?}");
             },
+
+            SwarmEvent::Behaviour(DissonanceEvent::Mdns(event)) => match event {
+            libp2p::mdns::Event::Discovered(peers) => {
+                for (peer, addr) in peers {
+                    println!("[MDNS] Discovered peer {} at {:?}", peer, addr);
+                    // FUTURE:
+                    // - Add discovered peer to kademlia for routing table updates
+                    swarm.behaviour_mut().add_kademlia_address(&peer, addr);
+                }
+            },
+            libp2p::mdns::Event::Expired(peers) => {
+                for (peer, addr) in peers {
+                    println!("[MDNS] Peer expired: {} at {:?}", peer, addr);
+                    // FUTURE: Optionally remove peer from routing table if no longer reachable
+                }
+            }
+        }
             _ => {
                 //Handle silently
             }

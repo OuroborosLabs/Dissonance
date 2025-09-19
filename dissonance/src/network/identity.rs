@@ -34,7 +34,24 @@ impl NodeIdentity{
             Ok(identity)
         }
     }
+    pub fn generate_ephemeral() -> Result<Self> {
+        println!("⚠️ Generating ephemeral (in-memory) identity, not persisted to disk!");
+        let mut secret_bytes = [0u8; SECRET_KEY_LENGTH];
+        rand::rngs::OsRng.try_fill_bytes(&mut secret_bytes)?;
+        let signing_key: SigningKey = SigningKey::from_bytes(&secret_bytes);
+        let verifying_key = signing_key.verifying_key();
 
+        let lp2p_pub = identity::ed25519::PublicKey::try_from_bytes(&verifying_key.to_bytes())
+            .context("Failed to create libp2p public key for ephemeral identity")?;
+        let peer_id = PeerId::from_public_key(&identity::PublicKey::from(lp2p_pub));
+
+        println!("Created ephemeral Node identity: {}", peer_id);
+        Ok(NodeIdentity {
+            signing_key,
+            verifying_key,
+            peer_id,
+        })
+    }
     fn load_or_generate() -> Result<Self>{
         let mut secret_bytes = [0u8; SECRET_KEY_LENGTH];
         rand::rngs::OsRng.try_fill_bytes(&mut secret_bytes)?;
