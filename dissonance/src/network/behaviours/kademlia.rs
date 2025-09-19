@@ -14,7 +14,7 @@ pub fn get_kademlia(identity: &NodeIdentity) -> KademliaBehaviour<KademliaStore>
     kad_config.set_replication_factor(20.try_into().unwrap());
     kad_config.set_max_packet_size(16*1024);
 
-    let mut kademlia = KademliaBehaviour::with_config(identity.peer_id, kad_store, kad_config);
+    let mut kademlia = KademliaBehaviour::with_config(identity.peer_id(), kad_store, kad_config);
     kademlia.set_mode(Some(KademliaMode::Server));
 
     kademlia

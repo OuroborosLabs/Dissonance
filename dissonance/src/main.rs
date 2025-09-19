@@ -5,11 +5,11 @@ use libp2p::{
 };
 use tracing_subscriber::EnvFilter;
 
-use dissonance::network::builder::{build_swarm, DissonanceEvent};
+use dissonance::network::behaviour::{DissonanceBehaviour, DissonanceEvent};
+use dissonance::network::builder::{build_swarm};
 use dissonance::NodeIdentity;
 
 use libp2p::kad::Event as KademliaEvent;
-// Dummy behaviour
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

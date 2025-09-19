@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 pub struct NodeIdentity{
     pub signing_key: SigningKey,
     pub verifying_key: VerifyingKey,
-    pub peer_id: PeerId
+    peer_id: PeerId
 }
 
 #[derive(Serialize, Deserialize)]
